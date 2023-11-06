@@ -1,0 +1,45 @@
+---
+- hosts: "{{ target }}"
+  tasks:
+    - name: Make new project directory
+      file: path=/var/pkg/{{ project }}-{{ version }} owner={{release_user}} group=www-data mode=0755 state=directory
+      become: true
+    - name: Deploy project
+      synchronize:
+        src: "{{ build_directory }}/"
+        dest: "/var/pkg/{{ project }}-{{ version }}"
+        set_remote_user: yes
+        links: yes
+        compress: yes
+        recursive: yes
+        delete: yes
+      become: true
+    - name: Recursively change ownership of a directory
+      file:
+        path: /var/pkg/{{ project }}-{{ version }}/
+        mode: u=rwX,g=rX,o=rX
+        recurse: yes
+      become: true
+    - name: Recursively change ownership of a directory
+      file:
+        path: /var/pkg/{{ project }}-{{ version }}/var
+        state: directory
+        recurse: yes
+        owner: "{{release_user}}"
+        group: "{{release_user}}"
+        mode: 0777
+      become: true
+    - name: Recursively change ownership of a directory
+      file:
+        path: /var/pkg/{{ project }}-{{ version }}/public
+        state: directory
+        recurse: yes
+        owner: "{{release_user}}"
+        group: "{{release_user}}"
+        mode: 0777
+      become: true
+  vars:
+    project: "{{ lookup('env','PROJECT_NAME') }}"
+    release_user: "{{ lookup('env','RELEASE_USER') }}"
+    build_directory: "{{ lookup('env','BUILD_DIRECTORY') }}"
+    version: "{{ lookup('env','VERSION') }}"

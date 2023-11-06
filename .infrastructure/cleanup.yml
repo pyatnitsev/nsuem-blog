@@ -1,0 +1,8 @@
+---
+- hosts: "{{ target }}"
+  tasks:
+    - name: clean
+      shell: 'find /var/pkg/ -mindepth 1 -maxdepth 1 -type d -regex ".+{{project}}-[0-9]+" | sort | head -n -5 | xargs rm -rf'
+      become: true
+  vars:
+    project: "{{ lookup('env','PROJECT_NAME') }}"

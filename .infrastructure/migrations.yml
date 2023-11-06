@@ -1,0 +1,8 @@
+---
+- hosts: "{{ target }}"
+  tasks:
+    - name: Migrations
+      shell: php /var/pkg/{{ project }}-{{ version }}/bin/console doctrine:migration:migrate --no-interaction --allow-no-migration
+  vars:
+    project: "{{ lookup('env','PROJECT_NAME') }}"
+    version: "{{ lookup('env','VERSION') }}"

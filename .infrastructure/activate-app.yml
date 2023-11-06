@@ -1,0 +1,23 @@
+---
+- hosts: "{{ target }}"
+  tasks:
+    - name: Create symlink
+      file:
+        src: "/var/pkg/{{ project }}-{{ version }}/"
+        dest: "/var/pkg/{{ project }}"
+        state: "link"
+        force: "yes"
+        owner: "{{release_user}}"
+        group: "{{release_user}}"
+      become: true
+  vars:
+    project: "{{ lookup('env','PROJECT_NAME') }}"
+    release_user: "{{ lookup('env','RELEASE_USER') }}"
+- hosts: "{{ target }}"
+  tasks:
+    - name: Stop workers
+      shell: php /var/pkg/{{ project }}-{{ version }}/bin/console messenger:stop-workers
+  vars:
+    project: "{{ lookup('env','PROJECT_NAME') }}"
+    version: "{{ lookup('env','VERSION') }}"
+    
