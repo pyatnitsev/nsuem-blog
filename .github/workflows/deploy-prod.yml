@@ -1,0 +1,102 @@
+name: Deploy to Production
+
+on:
+  push:
+    branches: [ "main", "master" ]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build_and_deploy:
+    env:
+      RELEASE_USER: ${{ vars.RELEASE_USER }}
+      PROJECT_NAME: ${{ vars.PROJECT_NAME }}
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+      - name: set VERSION
+        run: |
+          JSON_FMT='{"version":"%s","target":"%s","build_directory":"%s"}\n'
+          printf "$JSON_FMT" $((10000 + GITHUB_RUN_NUMBER)) "all" ${{ github.workspace }} >> extra.json
+          printf "${{ vars.INVENTORY }}" >> .hosts
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: 8.2
+          extensions: mysql, curl, xml, intl, amqp, bcmath, mbstring, gd, imagick, amqp, zip
+      - name: Cache Composer packages
+        id: composer-cache
+        uses: actions/cache@v3
+        with:
+          path: vendor
+          key: ${{ runner.os }}-php-${{ hashFiles('**/composer.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-php-
+
+      - name: Install dependencies
+        run: composer install --prefer-dist --no-progress
+      - name: Decrypt-secrets
+        env:
+          SYMFONY_DECRYPTION_SECRET: ${{ secrets.SYMFONY_DECRYPTION_SECRET }}
+        run: php bin/console secrets:decrypt-to-local --force --env=prod
+
+      - name: Dump ENV
+        run: composer dump-env prod
+      - name: Cache clear
+        run: php bin/console cache:clear -e prod && php bin/console cache:warmup -e prod
+      - name: Set Node.js 16.x
+        uses: actions/setup-node@v3
+        with:
+          node-version: 16.x
+
+      - run: npm install
+
+      - name: Run install
+        uses: borales/actions-yarn@v4
+        with:
+          cmd: encore prod
+      - name: cleanup frontend
+        run: rm -rf ./node_modules
+      - name: Run Tests
+        run: php bin/phpunit
+
+      - name: Run install app playbook
+        uses: dawidd6/action-ansible-playbook@v2
+        with:
+          playbook: ./.infrastructure/install-app.yml
+          key: ${{secrets.PROD_SERVER_PRIVATE_KEY}}
+          options: |
+            --extra-vars=@extra.json
+            --verbose
+            --inventory .hosts
+      - name: Run doctrine migrations playbook
+        uses: dawidd6/action-ansible-playbook@v2
+        with:
+          playbook: ./.infrastructure/migrations.yml
+          key: ${{secrets.PROD_SERVER_PRIVATE_KEY}}
+          known_hosts: .known_hosts
+          options: |
+            --extra-vars=@extra.json
+            --verbose
+            --inventory .hosts
+      - name: Run cleanup playbook
+        uses: dawidd6/action-ansible-playbook@v2
+        with:
+          playbook: ./.infrastructure/cleanup.yml
+          key: ${{secrets.PROD_SERVER_PRIVATE_KEY}}
+          known_hosts: .known_hosts
+          options: |
+            --extra-vars=@extra.json
+            --verbose
+            --inventory .hosts
+      - name: Activate
+        uses: dawidd6/action-ansible-playbook@v2
+        with:
+          playbook: ./.infrastructure/activate-app.yml
+          key: ${{secrets.PROD_SERVER_PRIVATE_KEY}}
+          known_hosts: .known_hosts
+          options: |
+            --extra-vars=@extra.json
+            --verbose
+            --inventory .hosts
