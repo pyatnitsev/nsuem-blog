@@ -84,7 +84,9 @@ class Article
 
     public function setAuthor(?User $author): static
     {
-        $this->author = $author;
+        if (!$this->author) {
+            $this->author = $author;
+        }
 
         return $this;
     }
